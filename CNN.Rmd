@@ -1,0 +1,89 @@
+---
+title: "Convolutional NNs on MNIST"
+output: html_notebook
+---
+
+Notebook to see the benefit of using a convolutional NN to keep local connectivity within the images. Carry out analysis on the MNIST dataset (becase... why not?).
+
+```{r}
+library(MASS)
+```
+
+Load Keras
+
+```{r}
+install.packages("devtools")
+devtools::install_github("rstudio/keras") # update all if prompted
+```
+
+```{r}
+library(keras)
+install_keras() # install Miniconda if prompted
+```
+
+Load MNIST
+
+```{r}
+filePath <- "https://raw.githubusercontent.com/AJCoca/SLP19/master/"
+fileName <- "mnist.csv"
+mnist <- read.csv(paste0(filePath, fileName), header = TRUE)
+```
+
+Build our CNN. We construct a CNN with two hidden layers. First, define training and testing sets (divide by 255 to turn into proportion).
+
+```{r}
+x_train <- as.matrix(mnist[1:4000,-1])
+y_train <- mnist[1:4000,1]
+x_test <- as.matrix(mnist[4001:6000,-1])
+y_test <- mnist[4001:6000,1]
+x_train <- x_train / 255
+x_test <- x_test / 255
+y_train <- as.factor(y_train)
+y_test <- as.factor(y_test)
+y_train <- model.matrix(~y_train-1)
+y_test <- model.matrix(~y_test-1)
+```
+
+Now define CNN. Add a dropout rate to remove hidden and input nodes for regularisation purposes.
+
+```{r}
+x_train <- array_reshape(x_train, dim=c(4000,28,28,1))
+x_test <- array_reshape(x_test, dim=c(2000,28,28,1))
+architecture <- list(
+layer_conv_2d(filters=32, kernel_size=c(3,3), activation = "relu",
+input_shape = c(28,28,1)),
+layer_dropout(rate=0.4),
+layer_conv_2d(filters=32, kernel_size=c(3,3), activation = "relu"),
+layer_dropout(rate=0.4),
+layer_flatten(),
+layer_dense(units = 10, activation = "softmax")
+)
+model <- keras_model_sequential(architecture)
+summary(model)
+```
+
+Now fit the model. Use adadelta as an optimiser (SGD but with bigger steps).
+
+```{r}
+compile(model, loss="categorical_crossentropy", optimizer="adam", metrics="acc")
+fit(model, x_train, y_train, epochs = 6, batch_size = 10)
+evaluate(model, x_test, y_test)
+```
+
+Check some of the images that have been misclassified:
+
+```{r}
+pred <- predict(model, x_test)
+err_ind <- (1:2000)[pred != y_test]
+visualise = function(vec, ...){ # function for graphically displaying a digit
+  image(matrix(as.numeric(vec),nrow=28)[,28:1], col=gray((255:0)/255), ...)
+}
+old_par <- par(mfrow = c(3,4))
+for (i in 1:12){
+  visualise(mnist[4000+err_ind[i],-1],
+  main=paste0("true=", y_test[err_ind[i]], ", pred=", pred[err_ind[i]]))
+}
+par(old_par)
+```
+
+
